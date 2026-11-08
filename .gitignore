@@ -1,0 +1,22 @@
+# Hemmeligheter
+.env
+
+# Rådata (mappen beholdes via .gitkeep, innholdet ignoreres)
+data/raw/*
+!data/raw/.gitkeep
+
+# Virtuelt miljø
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
