@@ -1,14 +1,22 @@
-"""Henter daglig stress, søvn og Body Battery fra Garmin Connect for de siste
-30 dagene og lagrer resultatet som CSV i data/raw/.
+"""Henter Garmin-data (døgnsammendrag, søvn, HRV, stress/Body Battery, puls og
+skritt) for de siste dagene og lagrer rå JSON per dato i data/raw/garmin/days/.
 
-Kjør fra prosjektroten:  .venv/bin/python src/fetch_garmin.py
+Historikken bygges opp over tid: hver dato har én fil, datoer utenfor
+henteperioden røres ikke, og hentes en dato på nytt, erstatter den nyeste
+hentingen den gamle. En dato skrives bare hvis alle kall lyktes og Garmin
+faktisk hadde data, slik at en mislykket henting aldri sletter gode data.
+
+Kjør fra prosjektroten:
+    .venv/bin/python -m src.fetch_garmin              # siste N dager (config.toml)
+    .venv/bin/python -m src.fetch_garmin --days 10
+    .venv/bin/python -m src.fetch_garmin --since 2026-11-03
 """
 
-import csv
+import argparse
+import json
 import os
 import sys
-from datetime import date, timedelta
-from pathlib import Path
+from datetime import date, datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 from garminconnect import (
@@ -18,12 +26,21 @@ from garminconnect import (
     GarminConnectTooManyRequestsError,
 )
 
-ROOT = Path(__file__).resolve().parent.parent
-RAW_DIR = ROOT / "data" / "raw"
+from src.config import GARMIN_DAYS_DIR, ROOT, load_config
+
 TOKEN_DIR = "~/.garminconnect"  # innloggingstokens lagres utenfor repoet
-DAYS = 30
-MAX_RANGE = 28  # Garmin avviser intervaller på mer enn 28 dager
 PLACEHOLDER = "endre-meg"
+NO_DATA = "ingen data hos Garmin"
+
+# Nøkkel i JSON-filen -> metode i garminconnect (alle tar én dato)
+ENDPOINTS = {
+    "user_summary": "get_user_summary",
+    "sleep": "get_sleep_data",
+    "hrv": "get_hrv_data",
+    "stress": "get_stress_data",  # inneholder også Body Battery gjennom døgnet
+    "heart_rates": "get_heart_rates",
+    "steps": "get_steps_data",
+}
 
 
 def prompt_mfa() -> str:
@@ -47,74 +64,87 @@ def login() -> Garmin:
     return api
 
 
-def fetch_range(method, start: date, end: date) -> list[dict]:
-    """Kaller en Garmin-metode med (start, slutt) i biter på maks MAX_RANGE dager."""
-    rows = []
-    chunk_start = start
-    while chunk_start <= end:
-        chunk_end = min(chunk_start + timedelta(days=MAX_RANGE - 1), end)
-        rows += method(chunk_start.isoformat(), chunk_end.isoformat()) or []
-        chunk_start = chunk_end + timedelta(days=1)
-    return rows
+def has_data(payload: dict) -> bool:
+    """Sant hvis Garmin har registrert noe for datoen (klokka var i bruk)."""
+    stress = payload.get("stress") or {}
+    hr = payload.get("heart_rates") or {}
+    sleep = (payload.get("sleep") or {}).get("dailySleepDTO") or {}
+    return bool(
+        stress.get("stressValuesArray")
+        or hr.get("heartRateValues")
+        or sleep.get("sleepTimeSeconds")
+    )
 
 
-def by_date(rows: list[dict], prefix: str) -> dict[str, dict]:
-    """Gjør Garmins dagsrader om til {dato: {kolonne: verdi}}.
+def fetch_day(api: Garmin, day: str) -> tuple[dict | None, str]:
+    """Henter alle endepunkter for én dato. Returnerer (payload, status)."""
+    payload = {
+        "date": day,
+        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    errors = []
+    for key, method in ENDPOINTS.items():
+        try:
+            payload[key] = getattr(api, method)(day)
+        except GarminConnectConnectionError as err:
+            # Noen endepunkter kaster feil når dagen er tom – avgjøres under.
+            payload[key] = None
+            errors.append(f"{method}: {err}")
+    if not has_data(payload):
+        return None, NO_DATA
+    if errors:
+        return None, "feil fra " + "; ".join(errors)
+    return payload, "ok"
 
-    Feltene ligger enten direkte på raden eller under "values"; nestede
-    lister/objekter (f.eks. Body Battery-kurven gjennom døgnet) hoppes over.
-    """
-    result = {}
-    for row in rows or []:
-        day = row.get("calendarDate") or row.get("date")
-        if not day:
-            continue
-        values = row.get("values", row)
-        result[day] = {
-            f"{prefix}_{key}": value
-            for key, value in values.items()
-            if key not in ("calendarDate", "date") and not isinstance(value, (dict, list))
-        }
-    return result
+
+def save_day(payload: dict) -> None:
+    """Skriver datoens fil atomisk, slik at en avbrutt kjøring ikke etterlater halve filer."""
+    GARMIN_DAYS_DIR.mkdir(parents=True, exist_ok=True)
+    target = GARMIN_DAYS_DIR / f"{payload['date']}.json"
+    tmp = target.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, target)
 
 
-def main() -> None:
+def fetch(days: int | None = None, since: date | None = None) -> int:
+    """Henter og lagrer dagene. Returnerer antall datoer som feilet."""
     end = date.today()
-    start = end - timedelta(days=DAYS - 1)
-    s, e = start.isoformat(), end.isoformat()
+    if since is None:
+        days = days or load_config()["garmin"]["days"]
+        since = end - timedelta(days=days - 1)
 
     try:
         api = login()
-        sources = [
-            by_date(fetch_range(api.get_daily_stress_stats, start, end), "stress"),
-            by_date(fetch_range(api.get_sleep_daily, start, end), "sleep"),
-            by_date(fetch_range(api.get_daily_body_battery_stats, start, end), "bb"),
-            by_date(fetch_range(api.get_body_battery, start, end), "bb"),
-        ]
+        failed = 0
+        day = since
+        while day <= end:
+            payload, status = fetch_day(api, day.isoformat())
+            if payload:
+                save_day(payload)
+                print(f"  {day}  lagret")
+            else:
+                print(f"  {day}  hoppet over ({status})")
+                failed += status != NO_DATA
+            day += timedelta(days=1)
     except GarminConnectAuthenticationError as err:
         sys.exit(f"Innlogging feilet: {err}")
     except GarminConnectTooManyRequestsError as err:
         sys.exit(f"Garmin begrenser antall forespørsler: {err}")
     except GarminConnectConnectionError as err:
         sys.exit(f"Kunne ikke hente data fra Garmin: {err}")
+    return failed
 
-    rows = []
-    for i in range(DAYS):
-        day = (start + timedelta(days=i)).isoformat()
-        row = {"date": day}
-        for source in sources:
-            row.update(source.get(day, {}))
-        rows.append(row)
 
-    columns = ["date"] + sorted({col for row in rows for col in row} - {"date"})
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
-    out = RAW_DIR / f"garmin_daily_{s}_{e}.csv"
-    with out.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=columns)
-        writer.writeheader()
-        writer.writerows(rows)
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--days", type=int, help="antall dager bakover, inkludert i dag")
+    group.add_argument("--since", type=date.fromisoformat, help="hent fra og med denne datoen")
+    args = parser.parse_args()
 
-    print(f"Lagret {len(rows)} dager og {len(columns)} kolonner til {out.relative_to(ROOT)}")
+    print("Henter Garmin-data …")
+    failed = fetch(days=args.days, since=args.since)
+    sys.exit(1 if failed else 0)
 
 
 if __name__ == "__main__":

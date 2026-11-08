@@ -1,0 +1,25 @@
+# Innstillinger for ai-training-coach. Endre verdiene her og kjør
+#   .venv/bin/python -m src.update
+# for at endringen skal slå inn i databasen.
+
+[strength]
+# Kroppsvekt som legges til ekstravekten på kroppsvektøvelser ved beregning av tonnasje.
+bodyweight_kg = 73.0
+
+# Øvelser der loggført vekt er ekstravekt (tom eller 0 = bare kroppsvekt).
+bodyweight_exercises = [
+    "Pull Ups",
+    "Chin Ups",
+    "Hanging Leg Raise",
+    "Jump Squat",
+    "Triceps Dips",
+    "Close Triceps Push Ups",
+    "Bodyweight Standing Calf Raise",
+    "Sit Ups",
+]
+
+[garmin]
+# Tidssonen Garmin-tidsstempler (UTC) konverteres til.
+timezone = "Europe/Oslo"
+# Antall dager bakover som hentes ved hver oppdatering (inkludert i dag).
+days = 3

@@ -5,6 +5,10 @@
 data/raw/*
 !data/raw/.gitkeep
 
+# Database bygget fra rådata
+data/*.db
+data/*.db.tmp
+
 # Virtuelt miljø
 .venv/
 venv/
