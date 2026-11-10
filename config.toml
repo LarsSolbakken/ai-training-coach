@@ -6,6 +6,10 @@
 # Kroppsvekt som legges til ekstravekten på kroppsvektøvelser ved beregning av tonnasje.
 bodyweight_kg = 73.0
 
+# Formel for estimert 1RM: "brzycki" (vekt × 36 / (37 − reps)) eller "epley" (vekt × (1 + reps/30)).
+# Når RIR finnes, brukes reps + RIR som reps i formelen. Bare sett med reps + RIR ≤ 5 får e1RM.
+e1rm_formula = "brzycki"
+
 # Øvelser der loggført vekt er ekstravekt (tom eller 0 = bare kroppsvekt).
 bodyweight_exercises = [
     "Pull Ups",
@@ -23,3 +27,31 @@ bodyweight_exercises = [
 timezone = "Europe/Oslo"
 # Antall dager bakover som hentes ved hver oppdatering (inkludert i dag).
 days = 3
+
+[coach]
+# Modell via OpenRouter (API-nøkkel: OPENROUTER_API_KEY i .env).
+model = "anthropic/claude-haiku-5.5"
+max_sentences = 5
+# Normalområde = snitt ± 1 standardavvik over så mange dager bakover …
+normal_window_days = 60
+# … og regnes som etablert først med så mange dager data.
+min_days_for_normal = 14
+# Stressnivå (0–100) som teller som topp. Garmin kaller 76–100 «høyt».
+stress_peak_threshold = 76
+# En topp kobles til en økt hvis den kommer inntil så mange minutter etter at økten sluttet.
+post_workout_minutes = 120
+# Styrkeloggen har ingen sluttid; antatt varighet på en styrkeøkt.
+strength_session_minutes = 75
+# Puls som regnes som aktiv periode i klokkedataene (for økter som ikke er loggført).
+active_hr = 100
+
+# Belastning siste 7 dager mot ukesnittet siste 4 uker (kondisjon og styrke hver for seg).
+# Forhold over load_ratio_high = «høyere», under load_ratio_low = «lavere».
+load_ratio_high = 1.3
+load_ratio_low = 0.8
+# Andel harde sett (RIR ≤ 3): forskjell i andel som teller som høyere/lavere (0.15 = 15 prosentpoeng).
+hard_share_diff = 0.15
+# Minst så mange sett med RIR i hvert vindu før andelen vurderes.
+min_rir_sets = 5
+# Er treningsloggen eldre enn så mange dager, er belastningen «ukjent».
+max_log_gap_days = 3

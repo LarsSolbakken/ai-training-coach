@@ -8,8 +8,9 @@ Kjør fra prosjektroten:  .venv/bin/python -m src.build_db
 
 import sqlite3
 
-from src import parse_garmin, parse_polar, parse_strength
+from src import coach, parse_garmin, parse_polar, parse_strength
 from src.config import (
+    COACH_DIR,
     DB_PATH,
     GARMIN_DAYS_DIR,
     POLAR_DIR,
@@ -39,7 +40,7 @@ CREATE TABLE strength_sets (
     total_load_kg   REAL NOT NULL,            -- inkl. kroppsvekt for kroppsvektøvelser
     reps            INTEGER NOT NULL,
     tonnage_kg      REAL NOT NULL,            -- total_load_kg × reps
-    e1rm_kg         REAL,                     -- Epley, bare 1–5 reps og ytre last
+    e1rm_kg         REAL,                     -- formel fra config.toml, ytre last, reps + RIR ≤ 5
     rir             REAL,                     -- fra notat; RIR = 10 − RPE hvis bare RPE
     rpe             REAL,                     -- som skrevet i notatet
     rir_source      TEXT,                     -- 'RIR' | 'RPE' | NULL
@@ -160,6 +161,22 @@ CREATE TABLE garmin_intraday (
 ) WITHOUT ROWID;
 CREATE INDEX idx_intraday_date ON garmin_intraday(date);
 
+CREATE TABLE coach_messages (
+    id              INTEGER PRIMARY KEY,
+    date            TEXT NOT NULL,            -- dagen meldingen gjelder
+    created_at      TEXT NOT NULL,            -- UTC
+    model           TEXT NOT NULL,
+    prompt_version  TEXT,                     -- hash av systemprompten
+    message         TEXT NOT NULL,
+    warnings        TEXT,                     -- regelbrudd som gjensto etter omskriving
+    attempts        INTEGER,
+    input_tokens    INTEGER,
+    output_tokens   INTEGER,
+    cost_usd        REAL,
+    input_json      TEXT NOT NULL             -- dataene modellen fikk
+);
+CREATE INDEX idx_coach_date ON coach_messages(date);
+
 -- Uken starter mandag: date(x, 'weekday 0', '-6 days') = mandagen i x sin uke.
 CREATE VIEW v_strength_session AS
 SELECT s.id AS session_id,
@@ -208,7 +225,10 @@ def build() -> dict[str, int]:
     bw_exercises = set(cfg["strength"]["bodyweight_exercises"])
 
     strength_sessions, strength_sets = parse_strength.parse(
-        STRENGTH_CSV, cfg["strength"]["bodyweight_kg"], bw_exercises
+        STRENGTH_CSV,
+        cfg["strength"]["bodyweight_kg"],
+        bw_exercises,
+        cfg["strength"]["e1rm_formula"],
     )
     exercises = [
         {"name": name, "is_bodyweight": int(name in bw_exercises)}
@@ -227,6 +247,7 @@ def build() -> dict[str, int]:
         "cardio_route": route,
         "daily_wellness": daily,
         "garmin_intraday": intraday,
+        "coach_messages": coach.load_all(COACH_DIR),
     }
 
     # Bygg i en midlertidig fil og bytt inn til slutt, så en feil aldri

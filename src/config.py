@@ -8,6 +8,7 @@ RAW_DIR = ROOT / "data" / "raw"
 POLAR_DIR = RAW_DIR / "polar"
 STRENGTH_CSV = RAW_DIR / "styrke" / "gym-day.csv"
 GARMIN_DAYS_DIR = RAW_DIR / "garmin" / "days"
+COACH_DIR = RAW_DIR / "coach"  # én JSON per melding fra AI-coachen
 DB_PATH = ROOT / "data" / "training.db"
 
 

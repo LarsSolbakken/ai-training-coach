@@ -7,7 +7,9 @@ Regler (bekreftet av brukeren):
 - Tom eller 0 vekt på kroppsvektøvelser = bare kroppsvekt; vekt > 0 = ekstravekt.
 - Tonnasje = (kroppsvekt + ekstravekt) × reps for kroppsvektøvelser,
   ellers vekt × reps.
-- Estimert 1RM (Epley) bare for sett med 1–5 reps på øvelser med ytre last.
+- Estimert 1RM bare for øvelser med ytre last og sett der reps + RIR ≤ 5
+  (uten RIR: reps ≤ 5). Formel velges i config.toml (brzycki: vekt × 36 /
+  (37 − reps), eller epley); med RIR brukes reps + RIR som reps i formelen.
 - RIR/RPE hentes fra notatet; RPE regnes om med RIR = 10 − RPE.
   «RIR 10+» lagres som 10. Hardt sett = RIR ≤ 3.
 """
@@ -58,8 +60,21 @@ def effective_rir(rir: float | None, rpe: float | None) -> tuple[float | None, s
     return None, None
 
 
-def epley(weight: float, reps: int) -> float:
+def epley(weight: float, reps: float) -> float | None:
     return weight if reps == 1 else weight * (1 + reps / 30)
+
+
+def brzycki(weight: float, reps: float) -> float | None:
+    return weight * 36 / (37 - reps) if reps < 37 else None
+
+
+E1RM_FORMULAS = {"epley": epley, "brzycki": brzycki}
+
+
+def estimate_1rm(formula: str, weight: float, reps: int, rir: float | None) -> float | None:
+    """Estimert 1RM. Med RIR brukes reps + RIR (reps til failure) i formelen."""
+    value = E1RM_FORMULAS[formula](weight, reps + (rir or 0))
+    return None if value is None else round(value, 1)
 
 
 def read_rows(path: Path) -> list[list[str]]:
@@ -78,8 +93,12 @@ def read_rows(path: Path) -> list[list[str]]:
     return rows
 
 
-def parse(path: Path, bodyweight_kg: float, bodyweight_exercises: set[str]):
+def parse(path: Path, bodyweight_kg: float, bodyweight_exercises: set[str], e1rm_formula: str):
     """Returnerer (sessions, sets) som lister av dicts klare for databasen."""
+    if e1rm_formula not in E1RM_FORMULAS:
+        raise ValueError(
+            f"Ukjent e1rm_formula {e1rm_formula!r} i config.toml – velg en av {sorted(E1RM_FORMULAS)}"
+        )
     rows = read_rows(path)
 
     sessions: dict[str, dict] = {}
@@ -117,13 +136,13 @@ def parse(path: Path, bodyweight_kg: float, bodyweight_exercises: set[str]):
         is_bw = s["exercise"] in bodyweight_exercises
         load = s["weight"]
         total_load = bodyweight_kg + load if is_bw else load
-        e1rm = (
-            round(epley(load, s["reps"]), 1)
-            if not is_bw and load > 0 and 1 <= s["reps"] <= E1RM_MAX_REPS
-            else None
-        )
         rir_written, rpe = parse_effort(s["notes"] or "")
         rir, rir_source = effective_rir(rir_written, rpe)
+        e1rm = (
+            estimate_1rm(e1rm_formula, load, s["reps"], rir)
+            if not is_bw and load > 0 and s["reps"] >= 1 and s["reps"] + (rir or 0) <= E1RM_MAX_REPS
+            else None
+        )
         sets.append(
             {
                 "session_id": s["session_id"],
