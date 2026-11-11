@@ -169,6 +169,8 @@ CREATE TABLE coach_messages (
     prompt_version  TEXT,                     -- hash av systemprompten
     message         TEXT NOT NULL,
     warnings        TEXT,                     -- regelbrudd som gjensto etter omskriving
+    first_draft     TEXT,                     -- modellens første utkast
+    first_draft_violations TEXT,              -- reglene første utkast brøt (NULL = ingen)
     attempts        INTEGER,
     input_tokens    INTEGER,
     output_tokens   INTEGER,

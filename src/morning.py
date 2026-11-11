@@ -37,9 +37,12 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="vis dataene, men ikke kall modellen")
     parser.add_argument("--force", action="store_true", help="lag ny melding selv om dagens finnes")
     parser.add_argument("--no-update", action="store_true", help="ikke hent nye Garmin-data først")
+    parser.add_argument("--model", help="overstyr modellen i config.toml (f.eks. for å sammenligne)")
     args = parser.parse_args()
 
     cfg = load_config()["coach"]
+    if args.model:
+        cfg["model"] = args.model
     today = date.today()
 
     if not (args.force or args.dry_run) and (existing := coach.latest_for_day(COACH_DIR, today.isoformat())):
@@ -79,6 +82,10 @@ def main() -> None:
     print(result["message"])
     if result["warnings"]:
         print("\nAdvarsel – meldingen bryter fortsatt regler: " + "; ".join(result["warnings"]), file=sys.stderr)
+    if args.show_data and result["first_draft_violations"]:
+        print("\n----- Første utkast (skrevet om) -----\n")
+        print(result["first_draft"])
+        print("\nBrøt: " + "; ".join(result["first_draft_violations"]))
     if args.show_data:
         print(
             f"\n[{cfg['model']} · {result['attempts']} kall · {result['input_tokens']} inn / "

@@ -30,8 +30,8 @@ days = 3
 
 [coach]
 # Modell via OpenRouter (API-nøkkel: OPENROUTER_API_KEY i .env).
-model = "anthropic/claude-haiku-5.5"
-max_sentences = 5
+model = "anthropic/claude-sonnet-5.5"
+max_sentences = 4
 # Normalområde = snitt ± 1 standardavvik over så mange dager bakover …
 normal_window_days = 60
 # … og regnes som etablert først med så mange dager data.
