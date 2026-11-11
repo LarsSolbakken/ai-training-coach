@@ -1,0 +1,18 @@
+# Dashbordet inneholder helsedata: bare lokalt, ingen bruksstatistikk.
+[server]
+address = "127.0.0.1"
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+base = "light"
+backgroundColor = "#f9f9f7"
+secondaryBackgroundColor = "#f0efec"
+textColor = "#0b0b0b"
+primaryColor = "#2a78d6"
+font = "sans serif"

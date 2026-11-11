@@ -7,5 +7,6 @@ idna==3.20
 pycparser==3.12
 python-dotenv==1.2.4
 requests==2.34.2
+streamlit==1.67.0
 ua-generator==2.1.8
 urllib3==2.8.0

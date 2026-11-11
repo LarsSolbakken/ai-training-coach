@@ -36,6 +36,22 @@ forsiktige vinner (LOW/POOR teller som tydelig utenfor). Modellen nevner ikke ue
 Svaret sjekkes maskinelt (maks 5 setninger, ingen tall eller fagord); bryter det reglene,
 bes modellen én gang om å skrive det om.
 
+## Dashbord
+
+```bash
+.venv/bin/python -m src.dashboard   # åpner http://127.0.0.1:8501 (Ctrl+C for å stoppe)
+```
+
+Leser `data/training.db` (bare lesing). Kjører bare lokalt på 127.0.0.1, og Streamlits
+bruksstatistikk er slått av (`.streamlit/config.toml`), siden det inneholder helsedata.
+
+- **Forside:** dagens melding fra coachen, beste estimerte 1RM per uke for benkpress, knebøy,
+  markløft og trap bar siden 2023, og antall økter per uke (styrke, løping, judo).
+- **Detaljer:** søvn, hvilepuls og HRV som 7-dagers snitt med normalområdet som skyggelagt bånd.
+
+Ingen daglige poengsummer på forsiden, ingen røde/grønne varselfarger, og trender over uker.
+Fargene (blå, oransje, fiolett, magenta) er sjekket for fargeblindhet.
+
 ## Daglig oppdatering
 
 ```bash
